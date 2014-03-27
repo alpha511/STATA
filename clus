@@ -1,0 +1,80 @@
+// cluster sampling. Industry will be the cluster and each individual stock
+// price is a sampling unit.
+// by Changle Nian, update: Feb 26, 2014
+// cd G:\internship\d3
+use stra,clear
+
+// generate a list of all 144 months for later use.
+qui levelsof mon
+local months = r(levels)
+
+// find base price of Jan 2001
+keep if mon==200101
+contract industry // prepare to sample industry
+local N=_N
+// set seed 3897465
+
+// sample some industries first
+sample 20
+local n=_N
+sort industry
+keep industry
+save indu, replace
+use stra,clear
+keep if mon==200101
+sort industry
+merge industry using indu
+drop if _merge !=3 // find prices of stock in the sampled industries
+gen wt=`N'/`n'
+gen fpc=`N'
+svyset [pweight=wt],fpc(fpc) psu(industry)
+svy:total price
+local base=_b[price]
+
+// write prince indicies into another file
+capture: file close clus
+file open clus using clus.txt, write replace
+
+// compute and save price indices of each month
+qui foreach m in `months' {
+use stra,clear
+keep if mon==`m'
+contract industry
+local N=_N
+// set seed 3897465
+sample 20
+local n=_N
+sort industry
+keep industry
+save indu,replace
+use stra,clear
+keep if mon==`m'
+sort industry
+merge industry using indu
+drop if _merge !=3
+gen wt=`N'/`n'
+gen fpc=`N'
+svyset [pweight=wt],fpc(fpc) psu(industry)
+svy:total price
+local index=_b[price]/`base'
+file write clus "`index'" _n
+}
+file close clus
+
+
+// graph price indicies
+import delimited clus.txt, clear
+gen month=_n
+rename v1 price_index
+twoway (scatter price_index month) (lowess price_index month, bwidth(.1)), /*
+*/title("Sampled by Cluster") /*
+*/xtitle("month") ytitle("price index")
+graph save Graph clus.before.modification.gph, replace
+
+/* No matter choosing what cut off, the distribution of price indeices
+calculated by sampling does not resemble that of population.
+
+replace v1=. if v1>11
+qui twoway (scatter v1 n) (lowess v1 n, bwidth(.1)), xtitle("month") ytitle("price index")
+graph save Graph clus.after.modification.gph, replace
+*/
